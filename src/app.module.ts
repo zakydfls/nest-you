@@ -9,6 +9,8 @@ import { JwtModule } from '@nestjs/jwt';
 import { CommonModule } from './common/common.module';
 import { APP_INTERCEPTOR } from '@nestjs/core';
 import { TransformInterceptor } from './common';
+import { ChatModule } from './chat/chat.module';
+import { RabbitmqModule } from './rabbitmq/rabbitmq.module';
 
 @Module({
   imports: [
@@ -31,6 +33,8 @@ import { TransformInterceptor } from './common';
     }),
     UserModule,
     AuthModule,
+    ChatModule,
+    RabbitmqModule,
   ],
   controllers: [AppController],
   providers: [
