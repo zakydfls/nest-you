@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Simple Chat</title>
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+  </head>
+  <body>
+    <h2>Simple Chat</h2>
+
+    <label for="userId">User ID:</label>
+    <input type="text" id="userId" placeholder="Masukkan ID Anda" />
+    <button onclick="connect()">Connect</button>
+
+    <hr />
+
+    <label for="receiverId">Kirim ke (Receiver ID):</label>
+    <input type="text" id="receiverId" placeholder="Masukkan ID Penerima" />
+    <br />
+
+    <label for="message">Pesan:</label>
+    <input type="text" id="message" placeholder="Tulis pesan" />
+    <button onclick="sendMessage()">Kirim</button>
+
+    <hr />
+
+    <h3>Chat Messages</h3>
+    <ul id="chatBox"></ul>
+
+    <script>
+      let socket;
+      let userId;
+
+      function connect() {
+        userId = document.getElementById('userId').value;
+        if (!userId) {
+          alert('Masukkan User ID!');
+          return;
+        }
+
+        socket = io('http://localhost:3000', {
+          query: { userId: userId },
+        });
+
+        socket.emit('joinRoom', userId);
+
+        socket.on('message', (msg) => {
+          const chatBox = document.getElementById('chatBox');
+          const newMessage = document.createElement('li');
+          newMessage.textContent = `[${msg.senderId}] ➜ [${msg.receiverId}]: ${msg.content}`;
+          chatBox.appendChild(newMessage);
+        });
+
+        alert(`Connected as User: ${userId}`);
+      }
+
+      function sendMessage() {
+        const receiverId = document.getElementById('receiverId').value;
+        const message = document.getElementById('message').value;
+
+        if (!receiverId || !message) {
+          alert('Masukkan Receiver ID dan Pesan!');
+          return;
+        }
+
+        socket.emit('sendMessage', {
+          senderId: userId,
+          receiverId: receiverId,
+          content: message,
+        });
+
+        const chatBox = document.getElementById('chatBox');
+        const newMessage = document.createElement('li');
+        newMessage.textContent = `[${userId}] ➜ [${receiverId}]: ${message}`;
+        chatBox.appendChild(newMessage);
+      }
+    </script>
+  </body>
+</html>
