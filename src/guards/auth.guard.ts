@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { Observable } from 'rxjs';
+import { TokenPayload } from 'src/auth/dtos/interface/token.interface';
 
 @Injectable()
 export class AuthGuard implements CanActivate {
@@ -21,7 +22,7 @@ export class AuthGuard implements CanActivate {
       throw new UnauthorizedException('Unauthorized');
     }
     try {
-      const payload = this.jwtService.verify(token);
+      const payload: TokenPayload = this.jwtService.verify(token);
       req.userId = payload.userId;
     } catch (e) {
       Logger.error(e);

@@ -18,12 +18,10 @@ export class HttpExceptionFilter implements ExceptionFilter {
       statusCode: status,
       message: 'Error',
       success: false,
-      data: null,
       error:
         typeof exceptionResponse === 'string'
           ? exceptionResponse
           : (exceptionResponse as any).message,
-      metadata: null,
     });
   }
 }

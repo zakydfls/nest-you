@@ -1,15 +1,17 @@
-import { IsString, IsNotEmpty } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional } from 'class-validator';
 
-export class CreateMessageDto {
-  @IsString()
-  @IsNotEmpty()
+interface MessagePayload {
   content: string;
+  messageType?: string;
+  receiverId?: string;
+}
 
+export class SendMessage {
   @IsString()
+  // nullable
+  @IsOptional()
+  conversationId: string;
+  // content: string;
   @IsNotEmpty()
-  senderId: string;
-
-  @IsString()
-  @IsNotEmpty()
-  receiverId: string;
+  payload: MessagePayload;
 }

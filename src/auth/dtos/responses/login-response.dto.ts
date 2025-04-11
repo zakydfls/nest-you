@@ -12,6 +12,18 @@ class TokenData {
     description: 'Refresh token',
   })
   refreshToken: string;
+
+  @ApiProperty({
+    example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
+    description: 'Socket token',
+  })
+  socketToken: string;
+
+  @ApiProperty({
+    example: 'nfdnsdjnfjdnsjfndsnfsdnjf',
+    description: 'User Id',
+  })
+  userId: string;
 }
 
 export class LoginResponseDto {

@@ -3,10 +3,14 @@ import { InjectModel } from '@nestjs/mongoose';
 import { User } from './schemas/user.schema';
 import { Model } from 'mongoose';
 import { ProfileDto } from './dtos/profile.dto';
+import { Helper } from 'src/common';
 
 @Injectable()
 export class UserService {
-  constructor(@InjectModel(User.name) private userModel: Model<User>) {}
+  constructor(
+    @InjectModel(User.name) private userModel: Model<User>,
+    private helper: Helper,
+  ) {}
 
   async createProfile(userId: string, profileDto: ProfileDto) {
     const user = await this.userModel.findById(userId);
@@ -46,9 +50,8 @@ export class UserService {
     }
     if (profileDto.birthday !== undefined) {
       user.birthday = profileDto.birthday;
-    }
-    if (profileDto.horoscope !== undefined) {
-      user.horoscope = profileDto.horoscope;
+      const horoscope = Helper.getHoroscope(profileDto.birthday);
+      user.horoscope = horoscope;
     }
     if (profileDto.zodiac !== undefined) {
       user.zodiac = profileDto.zodiac;
@@ -60,14 +63,14 @@ export class UserService {
       user.weight = profileDto.weight;
     }
 
-    if (profileDto.interests?.length) {
+    if (profileDto.interests !== undefined) {
       await this.userModel.findByIdAndUpdate(
         userId,
-        { $addToSet: { interests: { $each: profileDto.interests } } },
+        { $set: { interests: profileDto.interests } },
         { new: true },
       );
+      user.interests = profileDto.interests;
     }
-
     const updatedUser = await user.save();
     const { password, ...userWithoutPassword } = updatedUser.toObject();
 
@@ -97,5 +100,19 @@ export class UserService {
 
     const { password, ...userWithoutPassword } = user.toObject();
     return userWithoutPassword;
+  }
+
+  async deleteUser(userId: string) {
+    const user = await this.userModel.findByIdAndDelete(userId);
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    const { password, ...userWithoutPassword } = user.toObject();
+    return userWithoutPassword;
+  }
+
+  async oneById(id: string) {
+    return this.userModel.findById(id);
   }
 }

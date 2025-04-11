@@ -28,9 +28,8 @@ export class TransformInterceptor<T>
         statusCode: context.switchToHttp().getResponse().statusCode,
         message: message || 'Success',
         success: true,
-        data: data?.data || data || null,
-        error: null,
-        metadata: data?.metadata || null,
+        data: data?.data || data,
+        metadata: data?.metadata,
       })),
     );
   }

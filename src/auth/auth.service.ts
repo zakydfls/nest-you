@@ -9,6 +9,7 @@ import { JwtService } from '@nestjs/jwt';
 import { Token } from './schemas/token.schema';
 import { v4 as uuidv4 } from 'uuid';
 import { RefreshDto } from './dtos/requests/refresh.dto';
+import { TokenPayload } from './dtos/interface/token.interface';
 
 @Injectable()
 export class AuthService {
@@ -48,6 +49,14 @@ export class AuthService {
     return userWithoutPassword;
   }
 
+  verifyToken(token: string) {
+    try {
+      return this.jwtService.verify(token);
+    } catch (err) {
+      throw new UnauthorizedException('Invalid token');
+    }
+  }
+
   async login(loginDto: LoginUserDto) {
     const { email, password } = loginDto;
     const user = await this.userModel.findOne({
@@ -64,19 +73,31 @@ export class AuthService {
 
     const accessToken = await this.generateUserToken(user.id);
     const refreshToken = uuidv4();
+    const socketToken = uuidv4();
 
     const token = await this.tokenModel.create({
       token: refreshToken,
       userId: user.id,
+      type: 'refresh',
+      expiryDate: new Date(Date.now() + 1000 * 60 * 60 * 24 * 30),
+      active: true,
+    });
+    const wsToken = await this.tokenModel.create({
+      token: socketToken,
+      userId: user.id,
+      type: 'ws',
       expiryDate: new Date(Date.now() + 1000 * 60 * 60 * 24 * 30),
       active: true,
     });
 
-    return { accessToken, refreshToken };
+    return { accessToken, refreshToken, socketToken, userId: user.id };
   }
 
   async generateUserToken(userId: string) {
-    const accessToken = this.jwtService.sign({ userId }, { expiresIn: '1h' });
+    const TokenPayload: TokenPayload = {
+      userId: userId,
+    };
+    const accessToken = this.jwtService.sign(TokenPayload, { expiresIn: '1d' });
     return accessToken;
   }
 

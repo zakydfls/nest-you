@@ -12,7 +12,10 @@ export class Token extends Document {
   @Prop({ required: true, type: Date })
   expiryDate: Date;
   @Prop({ required: true })
+  type: string;
+  @Prop({ required: true })
   active: boolean;
 }
 
 export const TokenSchema = SchemaFactory.createForClass(Token);
+export type TokenDocument = Token & Document;

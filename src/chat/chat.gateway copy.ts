@@ -7,6 +7,7 @@ import {
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import { InjectModel } from '@nestjs/mongoose';
+import { Model } from 'mongoose';
 import { Message, MessageDocument } from './schemas/chat.schema';
 import {
   Conversation,
@@ -14,8 +15,7 @@ import {
 } from './schemas/conversation.schema';
 import { UseGuards } from '@nestjs/common';
 import { WsGuard } from 'src/guards/websocket.guard';
-import { Token, TokenDocument } from 'src/auth/schemas/token.schema';
-import { Model } from 'mongoose';
+import { User } from 'src/user/schemas/user.schema';
 
 @WebSocketGateway({
   cors: {
@@ -24,68 +24,46 @@ import { Model } from 'mongoose';
     credentials: true,
   },
 })
-// @UseGuards(WsGuard)
+@UseGuards(WsGuard)
 export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer() server: Server;
   private connectedUsers = new Map<string, string>();
 
   constructor(
     @InjectModel(Message.name) private messageModel: Model<MessageDocument>,
+    @InjectModel(User.name) private userModel: Model<User>,
     @InjectModel(Conversation.name)
     private conversationModel: Model<ConversationDocument>,
-    @InjectModel(Token.name)
-    private tokenModel: Model<TokenDocument>,
   ) {}
 
-  // handleConnection(client: Socket) {
-  //   console.log(`Client connected: ${client.id}`);
-  // }
-
   handleConnection(client: Socket) {
-    const token =
-      client.handshake.auth?.token || client.handshake.headers.authorization;
-
-    if (!token) {
-      client.disconnect();
-      console.log(`Client connection rejected (no token): ${client.id}`);
-      return;
-    }
-
-    this.tokenModel
-      .findOne({
-        token,
-        active: true,
-        expiryDate: { $gt: new Date() },
-      })
-      .exec()
-      .then((tokenDoc) => {
-        if (!tokenDoc) {
-          client.disconnect();
-          console.log(
-            `Client connection rejected (invalid token): ${client.id}`,
-          );
-          return;
-        }
-
-        client['userId'] = tokenDoc.userId;
-        this.connectedUsers.set(client.id, tokenDoc.userId.toString());
-        console.log(
-          `Client connected: ${client.id} (user: ${tokenDoc.userId})`,
-        );
-      })
-      .catch((err) => {
-        console.error('Connection error during token validation:', err);
+    try {
+      const userId = client['userId'];
+      if (userId) {
+        this.connectedUsers.set(client.id, userId);
+        console.log(`Client connected: ${client.id} (User: ${userId})`);
+        client.emit('connectionSuccess', { userId });
+      } else {
+        // console.log('No userId found, disconnecting client');
         client.disconnect();
-      });
+      }
+    } catch (error) {
+      console.error('Connection error:', error);
+      client.disconnect();
+    }
   }
 
   handleDisconnect(client: Socket) {
-    const userId = this.connectedUsers.get(client.id);
-    if (userId) {
-      this.server.emit('userOffline', userId);
+    try {
+      const userId = this.connectedUsers.get(client.id);
+      if (userId) {
+        console.log(`Client disconnected: ${client.id} (User: ${userId})`);
+        this.server.emit('userOffline', userId);
+      }
+      this.connectedUsers.delete(client.id);
+    } catch (error) {
+      console.error('Disconnect error:', error);
     }
-    this.connectedUsers.delete(client.id);
-    console.log(`Client disconnected: ${client.id}`);
   }
 
   @SubscribeMessage('register')
@@ -96,25 +74,70 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   @SubscribeMessage('startConversation')
-  async handleStartConversation(client: Socket, receiverId: string) {
-    const senderId = this.connectedUsers.get(client.id);
-    if (!senderId) return { error: 'User not registered' };
+  async handleStartConversation(
+    client: Socket,
+    payload: { receiverId: string },
+  ) {
+    try {
+      const senderId = client['userId']; // Gunakan userId dari WsGuard
+      if (!senderId) return { error: 'User not authenticated' };
+      if (senderId === payload.receiverId)
+        return { error: 'Cannot start conversation with yourself' };
 
-    let conversation = await this.conversationModel.findOne({
-      participants: { $all: [senderId, receiverId.toString()] },
-      isActive: true,
-    });
-
-    if (!conversation) {
-      conversation = await this.conversationModel.create({
-        participants: [senderId, receiverId.toString()],
-        unreadCount: { [senderId]: 0, [receiverId]: 0 },
-        lastMessageAt: new Date(),
+      // Check if receiver exists
+      const receiverExists = await this.userModel.exists({
+        _id: payload.receiverId,
       });
-    }
+      if (!receiverExists) return { error: 'Receiver not found' };
 
-    return { conversationId: conversation._id };
+      // Check for existing conversation
+      let conversation = await this.conversationModel.findOne({
+        participants: { $all: [senderId, payload.receiverId] },
+        isActive: true,
+      });
+
+      if (!conversation) {
+        conversation = await this.conversationModel.create({
+          participants: [senderId, payload.receiverId],
+          unreadCount: { [senderId]: 0, [payload.receiverId]: 0 },
+          lastMessageAt: new Date(),
+        });
+      }
+
+      // Emit to both participants
+      this.server
+        .to(senderId)
+        .emit('conversationStarted', { conversationId: conversation._id });
+      this.server
+        .to(payload.receiverId)
+        .emit('conversationStarted', { conversationId: conversation._id });
+
+      return { conversationId: conversation._id };
+    } catch (error) {
+      console.error('Error starting conversation:', error);
+      return { error: 'Failed to start conversation' };
+    }
   }
+  // @SubscribeMessage('startConversation')
+  // async handleStartConversation(client: Socket, receiverId: string) {
+  //   const senderId = this.connectedUsers.get(client.id);
+  //   if (!senderId) return { error: 'User not registered' };
+
+  //   let conversation = await this.conversationModel.findOne({
+  //     participants: { $all: [senderId, receiverId] },
+  //     isActive: true,
+  //   });
+
+  //   if (!conversation) {
+  //     conversation = await this.conversationModel.create({
+  //       participants: [senderId, receiverId],
+  //       unreadCount: { [senderId]: 0, [receiverId]: 0 },
+  //       lastMessageAt: new Date(),
+  //     });
+  //   }
+
+  //   return { conversationId: conversation._id };
+  // }
 
   @SubscribeMessage('sendMessage')
   async handleMessage(
@@ -129,6 +152,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     );
     if (!conversation) return { error: 'Conversation not found' };
 
+    // Create and save message
     const message = await this.messageModel.create({
       conversationId: payload.conversationId,
       sender: senderId,
@@ -136,6 +160,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       messageType: payload.messageType || 'text',
     });
 
+    // Update conversation
     const receiverId = conversation.participants.find((p) => p !== senderId);
     await this.conversationModel.findByIdAndUpdate(payload.conversationId, {
       lastMessage: payload.content,
@@ -144,6 +169,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       $inc: { [`unreadCount.${receiverId}`]: 1 },
     });
 
+    // Emit to all participants
     conversation?.participants?.forEach((participantId) => {
       this.server.to(participantId).emit('newMessage', {
         message,
@@ -173,7 +199,6 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       .limit(limit)
       .exec();
 
-    console.log(messages.reverse());
     return messages.reverse();
   }
 
@@ -190,7 +215,6 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       .sort({ lastMessageAt: -1 })
       .exec();
 
-    console.log(conversations);
     return conversations;
   }
 
@@ -199,6 +223,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     const userId = this.connectedUsers.get(client.id);
     if (!userId) return { error: 'User not registered' };
 
+    // Mark messages as read
     await this.messageModel.updateMany(
       {
         conversationId,
@@ -208,6 +233,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       { isRead: true },
     );
 
+    // Reset unread count
     await this.conversationModel.findByIdAndUpdate(conversationId, {
       $set: { [`unreadCount.${userId}`]: 0 },
     });
@@ -224,22 +250,17 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   @SubscribeMessage('typing')
-  async handleTyping(client: Socket, payload: { conversationId: string }) {
+  async handleTyping(client: Socket, conversationId: string) {
     const senderId = this.connectedUsers.get(client.id);
     if (!senderId) return;
 
-    const conversation = await this.conversationModel.findById(
-      payload.conversationId,
-    );
+    const conversation = await this.conversationModel.findById(conversationId);
     if (!conversation) return;
 
-    console.log(
-      `User ${senderId} is typing in conversation ${payload.conversationId}`,
-    );
     conversation?.participants?.forEach((participantId) => {
       if (participantId !== senderId) {
         this.server.to(participantId).emit('userTyping', {
-          conversationId: payload.conversationId.toString(),
+          conversationId,
           userId: senderId,
         });
       }
@@ -247,22 +268,17 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   @SubscribeMessage('stopTyping')
-  async handleStopTyping(client: Socket, payload: { conversationId: string }) {
+  async handleStopTyping(client: Socket, conversationId: string) {
     const senderId = this.connectedUsers.get(client.id);
     if (!senderId) return;
 
-    const conversation = await this.conversationModel.findById(
-      payload.conversationId,
-    );
+    const conversation = await this.conversationModel.findById(conversationId);
     if (!conversation) return;
 
-    console.log(
-      `User ${senderId} stopped typing in conversation ${payload.conversationId}`,
-    );
     conversation.participants.forEach((participantId) => {
       if (participantId !== senderId) {
         this.server.to(participantId).emit('userStopTyping', {
-          conversationId: payload.conversationId.toString(),
+          conversationId,
           userId: senderId,
         });
       }
