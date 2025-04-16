@@ -43,7 +43,8 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   async handleConnection(client: Socket) {
     try {
-      const token = client.handshake.auth?.token;
+      const token =
+        client.handshake.auth?.token || client.handshake.headers.authorization;
 
       if (!token) {
         client.disconnect();
