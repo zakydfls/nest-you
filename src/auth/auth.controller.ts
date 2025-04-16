@@ -1,4 +1,4 @@
-import { Body, Controller, Post } from '@nestjs/common';
+import { Body, Controller, Delete, Post, Req, UseGuards } from '@nestjs/common';
 import { RegisterUserDto } from './dtos/requests/register.dto';
 import { AuthService } from './auth.service';
 import { LoginUserDto } from './dtos/requests/login.dto';
@@ -8,6 +8,7 @@ import { ApiOperation } from '@nestjs/swagger';
 import { LoginResponseDto } from './dtos/responses/login-response.dto';
 import { RegisterResponseDto } from './dtos/responses/register-response.dto';
 import { RefreshResponseDto } from './dtos/responses/refresh-response.dto';
+import { AuthGuard } from 'src/guards/auth.guard';
 
 @Controller('')
 export class AuthController {
@@ -31,5 +32,13 @@ export class AuthController {
   @ApiResponse(200, 'Token refreshed successfully', RefreshResponseDto)
   async refresh(@Body() refreshDto: RefreshDto) {
     return this.authService.refreshToken(refreshDto);
+  }
+
+  @UseGuards(AuthGuard)
+  @Delete('logout')
+  @ApiOperation({ summary: 'Logout user' })
+  @ApiResponse(200, 'User logged out successfully')
+  async logout(@Req() req) {
+    return this.authService.logout(req.userId);
   }
 }

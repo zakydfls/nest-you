@@ -118,4 +118,18 @@ export class AuthService {
     const accessToken = await this.generateUserToken(user.id);
     return { accessToken };
   }
+
+  async logout(userId: string) {
+    await this.tokenModel.deleteMany({
+      userId: userId,
+      type: 'refresh',
+    });
+
+    await this.tokenModel.deleteMany({
+      userId: userId,
+      type: 'ws',
+    });
+
+    return { message: 'Logged out successfully' };
+  }
 }

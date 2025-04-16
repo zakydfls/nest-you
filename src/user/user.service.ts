@@ -52,9 +52,8 @@ export class UserService {
       user.birthday = profileDto.birthday;
       const horoscope = Helper.getHoroscope(profileDto.birthday);
       user.horoscope = horoscope;
-    }
-    if (profileDto.zodiac !== undefined) {
-      user.zodiac = profileDto.zodiac;
+      const zodiac = Helper.getZodiac(profileDto.birthday);
+      user.zodiac = zodiac;
     }
     if (profileDto.height !== undefined) {
       user.height = profileDto.height;

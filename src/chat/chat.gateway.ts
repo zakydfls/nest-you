@@ -24,7 +24,7 @@ import { Model } from 'mongoose';
     credentials: true,
   },
 })
-// @UseGuards(WsGuard)
+@UseGuards(WsGuard)
 export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer() server: Server;
   private connectedUsers = new Map<string, string>();
@@ -41,42 +41,47 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   //   console.log(`Client connected: ${client.id}`);
   // }
 
-  handleConnection(client: Socket) {
-    const token =
-      client.handshake.auth?.token || client.handshake.headers.authorization;
+  async handleConnection(client: Socket) {
+    try {
+      const token = client.handshake.auth?.token;
 
-    if (!token) {
-      client.disconnect();
-      console.log(`Client connection rejected (no token): ${client.id}`);
-      return;
-    }
-
-    this.tokenModel
-      .findOne({
-        token,
-        active: true,
-        expiryDate: { $gt: new Date() },
-      })
-      .exec()
-      .then((tokenDoc) => {
-        if (!tokenDoc) {
-          client.disconnect();
-          console.log(
-            `Client connection rejected (invalid token): ${client.id}`,
-          );
-          return;
-        }
-
-        client['userId'] = tokenDoc.userId;
-        this.connectedUsers.set(client.id, tokenDoc.userId.toString());
-        console.log(
-          `Client connected: ${client.id} (user: ${tokenDoc.userId})`,
-        );
-      })
-      .catch((err) => {
-        console.error('Connection error during token validation:', err);
+      if (!token) {
         client.disconnect();
+        console.log(`Client connection rejected (no token): ${client.id}`);
+        return;
+      }
+
+      const tokenDoc = await this.tokenModel
+        .findOne({
+          token,
+          active: true,
+          type: 'ws',
+          expiryDate: { $gt: new Date() },
+        })
+        .exec();
+
+      if (!tokenDoc) {
+        client.disconnect();
+        console.log(`Client connection rejected (invalid token): ${client.id}`);
+        return;
+      }
+
+      client['userId'] = tokenDoc.userId;
+      this.connectedUsers.set(client.id, tokenDoc.userId.toString());
+
+      client.join(tokenDoc.userId.toString());
+
+      client.emit('connectionSuccess', {
+        userId: tokenDoc.userId.toString(),
+        socketId: client.id,
+        message: 'Successfully connected to chat server',
       });
+
+      console.log(`Client connected: ${client.id} (user: ${tokenDoc.userId})`);
+    } catch (err) {
+      console.error('Connection error during token validation:', err);
+      client.disconnect();
+    }
   }
 
   handleDisconnect(client: Socket) {
@@ -144,15 +149,58 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       $inc: { [`unreadCount.${receiverId}`]: 1 },
     });
 
-    conversation?.participants?.forEach((participantId) => {
+    conversation.participants.forEach((participantId) => {
       this.server.to(participantId).emit('newMessage', {
         message,
         conversationId: payload.conversationId,
       });
     });
 
+    client.emit('messageSent', {
+      message,
+      conversationId: payload.conversationId,
+    });
+
     return message;
   }
+
+  // @SubscribeMessage('sendMessage')
+  // async handleMessage(
+  //   client: Socket,
+  //   payload: { conversationId: string; content: string; messageType?: string },
+  // ) {
+  //   const senderId = this.connectedUsers.get(client.id);
+  //   if (!senderId) return { error: 'User not registered' };
+
+  //   const conversation = await this.conversationModel.findById(
+  //     payload.conversationId,
+  //   );
+  //   if (!conversation) return { error: 'Conversation not found' };
+
+  //   const message = await this.messageModel.create({
+  //     conversationId: payload.conversationId,
+  //     sender: senderId,
+  //     content: payload.content,
+  //     messageType: payload.messageType || 'text',
+  //   });
+
+  //   const receiverId = conversation.participants.find((p) => p !== senderId);
+  //   await this.conversationModel.findByIdAndUpdate(payload.conversationId, {
+  //     lastMessage: payload.content,
+  //     lastSender: senderId,
+  //     lastMessageAt: new Date(),
+  //     $inc: { [`unreadCount.${receiverId}`]: 1 },
+  //   });
+
+  //   conversation?.participants?.forEach((participantId) => {
+  //     this.server.to(participantId).emit('newMessage', {
+  //       message,
+  //       conversationId: payload.conversationId,
+  //     });
+  //   });
+
+  //   return message;
+  // }
 
   @SubscribeMessage('getMessages')
   async handleGetMessages(
