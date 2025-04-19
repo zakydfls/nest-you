@@ -15,3 +15,9 @@ export class SendMessage {
   @IsNotEmpty()
   payload: MessagePayload;
 }
+
+// export interface ErrorResponse {
+//   type: 'Unauthorized' | 'NotFound' | 'ValidationError' | 'ServerError';
+//   message: string;
+//   details?: any;
+// }

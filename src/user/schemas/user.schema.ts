@@ -58,4 +58,5 @@ export class User extends Document {
   height: string;
 }
 
+export type UserDocument = User & Document;
 export const UserSchema = SchemaFactory.createForClass(User);

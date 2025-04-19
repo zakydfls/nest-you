@@ -7,6 +7,8 @@ import {
   ConversationDocument,
 } from './schemas/conversation.schema';
 import { SendMessage } from './dtos/chat.dto';
+import { UserDocument } from 'src/user/schemas/user.schema';
+import { ChatGateway } from './chat.gateway';
 
 @Injectable()
 export class ChatService {
@@ -14,6 +16,8 @@ export class ChatService {
     @InjectModel(Message.name) private messageModel: Model<MessageDocument>,
     @InjectModel(Conversation.name)
     private conversationModel: Model<ConversationDocument>,
+    @InjectModel('User') private userModel: Model<UserDocument>,
+    private readonly chatGateway: ChatGateway,
   ) {}
 
   async sendMessage(senderId: string, messageReq: SendMessage) {
@@ -33,6 +37,10 @@ export class ChatService {
       });
     }
 
+    if (!conversation.participants.includes(senderId)) {
+      throw new Error('Sender is not part of the conversation');
+    }
+
     const receiverId = conversation.participants.find((p) => p !== senderId);
     const message = await this.messageModel.create({
       conversationId: conversation.id,
@@ -47,6 +55,8 @@ export class ChatService {
       lastMessageAt: new Date(),
       $inc: { [`unreadCount.${receiverId}`]: 1 },
     });
+
+    this.chatGateway.newMessage(message, conversation);
 
     return message;
   }

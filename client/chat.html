@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Chat Application</title>
+    <link href="./style.css" rel="stylesheet" />
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+  </head>
+  <body>
+    <div id="loginForm" class="login-container">
+      <h2>Chat Login</h2>
+      <input type="text" id="tokenInput" placeholder="Enter your token" />
+      <button id="loginButton">Connect</button>
+    </div>
+
+    <div id="chatContainer" class="container" style="display: none">
+      <div class="sidebar">
+        <div class="user-info">
+          <h3>My Chat</h3>
+          <p id="userId"></p>
+        </div>
+        <div class="conversations-list" id="conversationsList">
+          <!-- Conversations will be listed here -->
+        </div>
+      </div>
+
+      <div class="chat-area">
+        <div class="chat-header">
+          <h3 id="currentConversationName">Select a conversation</h3>
+          <div id="typingIndicator"></div>
+        </div>
+        <div class="messages" id="messagesContainer">
+          <!-- Messages will appear here -->
+        </div>
+        <div class="input-area">
+          <input
+            type="text"
+            id="messageInput"
+            placeholder="Type a message..."
+            disabled
+          />
+          <button id="sendButton" disabled>Send</button>
+        </div>
+      </div>
+    </div>
+
+    <script src="./chat.js"></script>
+  </body>
+</html>
