@@ -112,6 +112,12 @@ export class UserService {
   }
 
   async oneById(id: string) {
-    return this.userModel.findById(id);
+    const user = await this.userModel.findById(id);
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    const { password, ...userWithoutPassword } = user.toObject();
+    return userWithoutPassword;
   }
 }

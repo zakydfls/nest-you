@@ -107,12 +107,12 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     console.log(`Client disconnected: ${client.id}`);
   }
 
-  @SubscribeMessage('register')
-  handleRegister(client: Socket, userId: string) {
-    this.connectedUsers.set(client.id, userId);
-    this.server.emit('userOnline', userId);
-    client.join(userId);
-  }
+  // @SubscribeMessage('register')
+  // handleRegister(client: Socket, userId: string) {
+  //   this.connectedUsers.set(client.id, userId);
+  //   this.server.emit('userOnline', userId);
+  //   client.join(userId);
+  // }
 
   @SubscribeMessage('startConversation')
   async handleStartConversation(
@@ -372,7 +372,6 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
           opponentId,
           opponentUsername,
           unreadCount,
-          isOnline: opponentId ? this.connectedUsers.has(opponentId) : false,
         };
       });
 
@@ -412,43 +411,43 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   // }
 
   @SubscribeMessage('markAsRead')
-  async handleMarkAsRead(client: Socket, conversationId: string) {
+  async handleMarkAsRead(client: Socket, payload: { conversationId: string }) {
     const userId = this.connectedUsers.get(client.id);
     if (!userId) return { error: 'User not registered' };
 
     await this.messageModel.updateMany(
       {
-        conversationId,
+        conversationId: payload.conversationId,
         sender: { $ne: userId },
         isRead: false,
       },
       { isRead: true },
     );
 
-    await this.conversationModel.findByIdAndUpdate(conversationId, {
+    await this.conversationModel.findByIdAndUpdate(payload.conversationId, {
       $set: { [`unreadCount.${userId}`]: 0 },
     });
 
-    const conversation = await this.conversationModel.findById(conversationId);
+    const conversation = await this.conversationModel.findById(
+      payload.conversationId,
+    );
     conversation?.participants?.forEach((participantId) => {
       if (participantId !== userId) {
         this.server.to(participantId).emit('messagesRead', {
-          conversationId,
+          conversationId: payload.conversationId,
           by: userId,
         });
       }
     });
   }
 
-  private typingUsers = new Map<string, NodeJS.Timeout>(); // Track typing timeouts
-  private readonly TYPING_TIMEOUT = 3000; // 3 seconds timeout
+  private typingUsers = new Map<string, NodeJS.Timeout>();
+  private readonly TYPING_TIMEOUT = 3000;
 
-  // Helper method to generate typing key
   private getTypingKey(userId: string, conversationId: string): string {
     return `${userId}-${conversationId}`;
   }
 
-  // Helper to clear typing timeout
   private clearTypingTimeout(userId: string, conversationId: string) {
     const key = this.getTypingKey(userId, conversationId);
     if (this.typingUsers.has(key)) {
@@ -477,19 +476,15 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         return { error: 'User not part of the conversation' };
       }
 
-      // Clear existing timeout if any
       this.clearTypingTimeout(senderId, payload.conversationId);
 
-      // Set new timeout
       const timeout = setTimeout(() => {
         this.handleStopTyping(client, payload);
       }, this.TYPING_TIMEOUT);
 
-      // Store the timeout
       const key = this.getTypingKey(senderId, payload.conversationId);
       this.typingUsers.set(key, timeout);
 
-      // Notify other participants
       conversation.participants.forEach((participantId) => {
         if (participantId !== senderId) {
           this.server.to(participantId).emit('userTyping', {
@@ -539,10 +534,8 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       );
       if (!conversation) return;
 
-      // Clear the typing timeout
       this.clearTypingTimeout(senderId, payload.conversationId);
 
-      // Notify other participants
       conversation.participants.forEach((participantId) => {
         if (participantId !== senderId) {
           this.server.to(participantId).emit('userStopTyping', {
